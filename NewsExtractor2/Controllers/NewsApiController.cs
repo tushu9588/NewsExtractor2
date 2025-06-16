@@ -58,15 +58,22 @@ namespace NewsExtractor2.Controllers
         // 🔁 Fetch News on Button Click
         [HttpPost]
         [Route("fetchall")]
-        public IHttpActionResult FetchAllNews()
+        public async System.Threading.Tasks.Task<IHttpActionResult> FetchAllNews()
         {
             try
             {
-                var sitemapNews = NewsFetcher.FetchNewsFromSitemapAsync().Result;
-                var breakingNews = BreakingNewsFetcher.FetchBreakingNewsAsync().Result;
+                // Fetch breaking news
+                var breaking = await BreakingNewsFetcher.FetchBreakingNewsAsync();
+                breaking.ForEach(n => n.Type = "Breaking");
 
-                NewsDatabaseSaver.SaveNews(sitemapNews);
-                NewsDatabaseSaver.SaveNews(breakingNews);
+                // Fetch regular news
+                var regular = await NewsFetcher.FetchNewsFromSitemapAsync();
+                regular.ForEach(n => n.Type = "Regular");
+
+                // Save all using single instance
+                var saver = new NewsDatabaseSaver();
+                saver.SaveNews(breaking);
+                saver.SaveNews(regular);
 
                 return Ok("✅ News fetched & saved successfully.");
             }
@@ -75,6 +82,8 @@ namespace NewsExtractor2.Controllers
                 return InternalServerError(ex);
             }
         }
+
     }
 }
+
 
