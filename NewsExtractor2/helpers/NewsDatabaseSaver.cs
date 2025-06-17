@@ -8,37 +8,30 @@ public class NewsDatabaseSaver
 {
     private string connStr = ConfigurationManager.ConnectionStrings["MySqlConn"].ConnectionString;
 
-    public void SaveNews(List<NewsItem> newsItems)
+    public void SaveNews(List<NewsItem> newsList)
     {
         using (var conn = new MySqlConnection(connStr))
         {
             conn.Open();
-
-            foreach (var item in newsItems)
+            foreach (var news in newsList)
             {
-                // Check for duplicates
-                string checkQuery = "SELECT COUNT(*) FROM news_table WHERE title = @title AND url = @url";
-                using (var checkCmd = new MySqlCommand(checkQuery, conn))
-                {
-                    checkCmd.Parameters.AddWithValue("@title", item.Title);
-                    checkCmd.Parameters.AddWithValue("@url", item.Url);
+                string query = @"INSERT IGNORE INTO News (title, url, PublicationDate, type, NewsImpact)
+                             VALUES (@title, @url, @date, @type, @impact)";
 
-                    int count = Convert.ToInt32(checkCmd.ExecuteScalar());
-                    if (count > 0) continue; // Skip duplicate
-                }
-
-                // Insert new news item
-                string insertQuery = @"INSERT INTO news_table (title, url, publication_date, type)
-                                       VALUES (@title, @url, @date, @type)";
-                using (var insertCmd = new MySqlCommand(insertQuery, conn))
+                using (var cmd = new MySqlCommand(query, conn))
                 {
-                    insertCmd.Parameters.AddWithValue("@title", item.Title);
-                    insertCmd.Parameters.AddWithValue("@url", item.Url);
-                    insertCmd.Parameters.AddWithValue("@date", item.PublicationDate);
-                    insertCmd.Parameters.AddWithValue("@type", item.Type);
-                    insertCmd.ExecuteNonQuery();
+                    cmd.Parameters.AddWithValue("@title", news.Title);
+                    cmd.Parameters.AddWithValue("@url", news.Url);
+                    cmd.Parameters.AddWithValue("@date", news.PublicationDate);
+                    cmd.Parameters.AddWithValue("@type", news.Type);
+                    cmd.Parameters.AddWithValue("@impact", news.NewsImpact ?? "Positive");
+                    cmd.ExecuteNonQuery();
                 }
             }
         }
     }
+
 }
+        
+    
+

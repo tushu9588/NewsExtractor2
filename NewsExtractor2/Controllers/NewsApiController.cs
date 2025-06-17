@@ -4,6 +4,7 @@ using System.Linq;
 using System.Web.Http;
 using MySql.Data.MySqlClient;
 using System.Configuration;
+using NewsExtractor2; // Make sure this matches your namespace
 
 namespace NewsExtractor2.Controllers
 {
@@ -11,66 +12,77 @@ namespace NewsExtractor2.Controllers
     public class NewsApiController : ApiController
     {
         private readonly string connStr = ConfigurationManager.ConnectionStrings["MySqlConn"]?.ConnectionString
-    ?? throw new InvalidOperationException("Connection string 'MySqlConn' not found in Web.config.");
+            ?? throw new InvalidOperationException("Connection string 'MySqlConn' not found in Web.config.");
 
-
-        // 🔍 Search API
+        // 🔍 GET: api/news/all
+        // ✅ GET: api/news/search?title=...&startDate=...&endDate=...
         [HttpGet]
         [Route("search")]
-        public IHttpActionResult SearchNews([FromUri] string title = "", [FromUri] string startDate = "", [FromUri] string endDate = "")
+        public IHttpActionResult SearchNews(string title = "", string startDate = "", string endDate = "")
         {
-            List<NewsItem> result = new List<NewsItem>();
-            DateTime start = string.IsNullOrEmpty(startDate) ? DateTime.Today : DateTime.Parse(startDate);
-            DateTime end = string.IsNullOrEmpty(endDate) ? DateTime.Today : DateTime.Parse(endDate);
+            List<NewsItem> results = new List<NewsItem>();
 
             using (var conn = new MySqlConnection(connStr))
             {
                 conn.Open();
-                string query = @"SELECT title, url, PublicationDate 
-                                 FROM News 
-                                 WHERE PublicationDate BETWEEN @start AND @end 
-                                 AND title LIKE @title";
+                string query = @"SELECT title, url, PublicationDate, type, NewsImpact FROM News
+                         WHERE (@title = '' OR title LIKE @title)
+                         AND (PublicationDate BETWEEN @start AND @end)";
 
                 using (var cmd = new MySqlCommand(query, conn))
                 {
+                    cmd.Parameters.AddWithValue("@title", "%" + title + "%");
+
+                    DateTime start = string.IsNullOrEmpty(startDate) ? DateTime.Today : DateTime.Parse(startDate);
+                    DateTime end = string.IsNullOrEmpty(endDate) ? DateTime.Today : DateTime.Parse(endDate);
+
                     cmd.Parameters.AddWithValue("@start", start);
-                    cmd.Parameters.AddWithValue("@end", end.AddDays(1)); // include full day
-                    cmd.Parameters.AddWithValue("@title", $"%{title}%");
+                    cmd.Parameters.AddWithValue("@end", end);
 
                     using (var reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            result.Add(new NewsItem
+                            results.Add(new NewsItem
                             {
                                 Title = reader.GetString("title"),
                                 Url = reader.GetString("url"),
-                                PublicationDate = reader.GetDateTime("PublicationDate")
+                                PublicationDate = reader.GetDateTime("PublicationDate"),
+                                Type = reader.GetString("type"),
+                                NewsImpact = reader.GetString("NewsImpact")
                             });
                         }
                     }
                 }
             }
 
-            return Ok(result);
+            return Ok(results);
         }
 
-        // 🔁 Fetch News on Button Click
+        
+
+
+        // 🔁 POST: api/news/fetchall
         [HttpPost]
         [Route("fetchall")]
         public async System.Threading.Tasks.Task<IHttpActionResult> FetchAllNews()
         {
             try
             {
-                // Fetch breaking news
                 var breaking = await BreakingNewsFetcher.FetchBreakingNewsAsync();
-                breaking.ForEach(n => n.Type = "Breaking");
+                breaking.ForEach(n =>
+                {
+                    n.Type = "Breaking";
+                    n.NewsImpact = "Positive";
+                });
 
-                // Fetch regular news
                 var regular = await NewsFetcher.FetchNewsFromSitemapAsync();
-                regular.ForEach(n => n.Type = "Regular");
+                regular.ForEach(n =>
+                {
+                    n.Type = "Regular";
+                    n.NewsImpact = "Positive";
+                });
 
-                // Save all using single instance
                 var saver = new NewsDatabaseSaver();
                 saver.SaveNews(breaking);
                 saver.SaveNews(regular);
@@ -83,7 +95,32 @@ namespace NewsExtractor2.Controllers
             }
         }
 
+        // ✏️ PUT: api/news/updateimpact
+        [HttpPut]
+        [Route("updateimpact")]
+        public IHttpActionResult UpdateNewsImpact([FromBody] NewsItem news)
+        {
+            if (string.IsNullOrEmpty(news.Title) || string.IsNullOrEmpty(news.NewsImpact))
+                return BadRequest("Title and NewsImpact are required.");
+
+            using (var conn = new MySqlConnection(connStr))
+            {
+                conn.Open();
+                string query = @"UPDATE News SET NewsImpact = @impact WHERE title = @title";
+
+                using (var cmd = new MySqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@impact", news.NewsImpact);
+                    cmd.Parameters.AddWithValue("@title", news.Title);
+                    int rows = cmd.ExecuteNonQuery();
+
+                    if (rows == 0)
+                        return NotFound();
+                }
+            }
+
+            return Ok("✅ NewsImpact updated successfully.");
+        }
+
     }
 }
-
-
