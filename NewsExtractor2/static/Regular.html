@@ -47,6 +47,14 @@
             <h2><i class="bi bi-newspaper"></i> <strong>Economic Times News</strong></h2>
             <p class="text-muted">Search and view the latest business headlines</p>
         </div>
+        <div class="col-md-2">
+            <select id="impact" class="form-select">
+                <option value="">All Impacts</option>
+                <option value="Positive">Positive</option>
+                <option value="Negative">Negative</option>
+                <option value="Archive">Archive</option>
+            </select>
+        </div>
 
         <div class="container-box">
             <div class="row g-2 mb-3">
@@ -79,9 +87,11 @@
                         <th>Title</th>
                         <th>Published On</th>
                         <th>Link</th>
+                        <th>Impact</th> <!-- Added -->
                     </tr>
                 </thead>
                 <tbody id="newsTableBody">
+
                     <!-- News rows will appear here -->
                 </tbody>
             </table>
@@ -123,12 +133,14 @@
 
                 news.forEach(item => {
                     const row = `
-                            <tr>
-                                <td>${item.Id}</td>
-                                <td>${item.Title}</td>
-                                <td>${new Date(item.PublicationDate).toLocaleDateString()}</td>
-                                <td><a href="${item.Url}" target="_blank">View</a></td>
-                            </tr>`;
+    <tr>
+        <td>${item.Id}</td>
+        <td>${item.Title}</td>
+        <td>${new Date(item.PublicationDate).toLocaleDateString()}</td>
+        <td><a href="${item.Url}" target="_blank">View</a></td>
+        <td>${item.NewsImpact}</td>
+    </tr>`;
+
                     tbody.innerHTML += row;
                 });
             } catch (error) {
