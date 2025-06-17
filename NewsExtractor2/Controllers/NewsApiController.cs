@@ -45,6 +45,7 @@ namespace NewsExtractor2.Controllers
                         {
                             results.Add(new NewsItem
                             {
+                                Id = reader.GetInt32("Id"), // ✅ Add this line
                                 Title = reader.GetString("title"),
                                 Url = reader.GetString("url"),
                                 PublicationDate = reader.GetDateTime("PublicationDate"),
@@ -52,6 +53,8 @@ namespace NewsExtractor2.Controllers
                                 NewsImpact = reader.GetString("NewsImpact")
                             });
                         }
+
+
                     }
                 }
             }
