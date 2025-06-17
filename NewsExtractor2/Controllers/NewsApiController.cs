@@ -41,22 +41,28 @@ namespace NewsExtractor2.Controllers
 
                     using (var reader = cmd.ExecuteReader())
                     {
-                        while (reader.Read())
-                        {
-                            results.Add(new NewsItem
+                        
+                        
+                            while (reader.Read())
                             {
-                                Id = reader.GetInt32("Id"), // ✅ Add this line
-                                Title = reader.GetString("title"),
-                                Url = reader.GetString("url"),
-                                PublicationDate = reader.GetDateTime("PublicationDate"),
-                                Type = reader.GetString("type"),
-                                NewsImpact = reader.GetString("NewsImpact")
-                            });
+                                results.Add(new NewsItem
+                                {
+                                    Id = Convert.ToInt32(reader["Id"]),
+                                    Title = reader["Title"].ToString(),
+                                    Url = reader["Url"].ToString(),
+                                    PublicationDate = Convert.ToDateTime(reader["PublicationDate"]),
+                                    Type = reader["Type"].ToString(),
+                                    NewsImpact = reader["NewsImpact"] != DBNull.Value
+                                                    ? reader["NewsImpact"].ToString()
+                                                    : "Positive"  // or use null if you prefer
+                                });
+                            }
+
+
+
+
                         }
-
-
                     }
-                }
             }
 
             return Ok(results);
