@@ -25,7 +25,7 @@ namespace NewsExtractor2.Controllers
             using (var conn = new MySqlConnection(connStr))
             {
                 conn.Open();
-                string query = @"SELECT title, url, PublicationDate, type, NewsImpact FROM News
+                string query = @"SELECT Id,title, url, PublicationDate, type, NewsImpact FROM News
                          WHERE (@title = '' OR title LIKE @title)
                          AND (PublicationDate BETWEEN @start AND @end)";
 
