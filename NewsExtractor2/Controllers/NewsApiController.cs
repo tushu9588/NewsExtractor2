@@ -16,7 +16,7 @@ namespace NewsExtractor2.Controllers
         // ✅ GET: api/news/search?title=...&startDate=...&endDate=...
         [HttpGet]
         [Route("search")]
-        public IHttpActionResult SearchNews(string title = "", string startDate = "", string endDate = "")
+        public IHttpActionResult SearchNews(string title = "", string startDate = "", string endDate = "", string impact = "")
         {
             var results = new List<NewsItem>();
 
@@ -24,9 +24,10 @@ namespace NewsExtractor2.Controllers
             {
                 conn.Open();
                 string query = @"SELECT Id, title, url, PublicationDate, type, NewsImpact 
-                                 FROM News
-                                 WHERE (@title = '' OR title LIKE @title)
-                                 AND (PublicationDate BETWEEN @start AND @end)";
+                         FROM News
+                         WHERE (@title = '' OR title LIKE @title)
+                         AND (PublicationDate BETWEEN @start AND @end)
+                         AND (@impact = '' OR NewsImpact = @impact)";
 
                 using (var cmd = new MySqlCommand(query, conn))
                 {
@@ -36,6 +37,7 @@ namespace NewsExtractor2.Controllers
                     DateTime end = string.IsNullOrEmpty(endDate) ? DateTime.Today : DateTime.Parse(endDate);
                     cmd.Parameters.AddWithValue("@start", start);
                     cmd.Parameters.AddWithValue("@end", end);
+                    cmd.Parameters.AddWithValue("@impact", impact);
 
                     using (var reader = cmd.ExecuteReader())
                     {
@@ -47,10 +49,10 @@ namespace NewsExtractor2.Controllers
                                 Title = reader["Title"].ToString(),
                                 Url = reader["Url"].ToString(),
                                 PublicationDate = Convert.ToDateTime(reader["PublicationDate"]),
-                                Type = reader["Type"].ToString(),
+                                Type = reader["type"].ToString(),
                                 NewsImpact = reader["NewsImpact"] != DBNull.Value
-                                                ? reader["NewsImpact"].ToString()
-                                                : null // <- Default null
+                                    ? reader["NewsImpact"].ToString()
+                                    : null
                             });
                         }
                     }
@@ -71,14 +73,14 @@ namespace NewsExtractor2.Controllers
                 breaking.ForEach(n =>
                 {
                     n.Type = "Breaking";
-                    n.NewsImpact = null; // <- Allow user to set it later
+                    n.NewsImpact = null;
                 });
 
                 var regular = await NewsFetcher.FetchNewsFromSitemapAsync();
                 regular.ForEach(n =>
                 {
                     n.Type = "Regular";
-                    n.NewsImpact = null; // <- Allow user to set it later
+                    n.NewsImpact = null;
                 });
 
                 var saver = new NewsDatabaseSaver();
@@ -93,7 +95,7 @@ namespace NewsExtractor2.Controllers
             }
         }
 
-        // ✏️ PUT: api/news/updateimpact?id=123&impact=Null
+        // ✏️ PUT: api/news/updateimpact?id=123&impact=Positive
         [HttpPut]
         [Route("updateimpact")]
         public IHttpActionResult UpdateNewsImpact(int id, string impact)
@@ -104,7 +106,7 @@ namespace NewsExtractor2.Controllers
             using (var connection = new MySqlConnection(connStr))
             {
                 connection.Open();
-                var query = "UPDATE News SET NewsImpact = @impact WHERE Id = @id";
+                string query = "UPDATE News SET NewsImpact = @impact WHERE Id = @id LIMIT 1";
 
                 using (var command = new MySqlCommand(query, connection))
                 {

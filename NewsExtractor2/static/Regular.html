@@ -31,6 +31,11 @@
             margin: 2px;
             padding: 2px 8px;
         }
+
+        #notificationBox {
+            z-index: 9999;
+            min-width: 300px;
+        }
     </style>
 </head>
 <body>
@@ -42,23 +47,31 @@
 
         <div class="container-box">
             <div class="row g-2 mb-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <input type="text" id="title" class="form-control" placeholder="Search by title...">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <input type="date" id="startDate" class="form-control">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <input type="date" id="endDate" class="form-control">
                 </div>
-                <div class="col-md-2 d-grid">
+                <div class="col-md-2">
+                    <select id="impactFilter" class="form-select">
+                        <option value="">All Impacts</option>
+                        <option value="Positive">Positive</option>
+                        <option value="Negative">Negative</option>
+                        <option value="Archive">Archive</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-grid">
                     <button onclick="fetchNews()" class="btn btn-primary">
                         <i class="bi bi-search"></i> Search
                     </button>
                 </div>
             </div>
 
-            <button onclick="fetchNews(true)" class="btn btn-success w-100">
+            <button onclick="fetchLatestNews()" class="btn btn-success w-100">
                 <i class="bi bi-arrow-clockwise"></i> Fetch Latest News
             </button>
         </div>
@@ -82,41 +95,56 @@
         </div>
     </div>
 
+    <!-- Notification Box -->
+    <div id="notificationBox" class="alert d-none position-fixed top-0 start-50 translate-middle-x mt-3 shadow" role="alert"></div>
+
     <script>
+        const apiBase = "https://localhost:44399/api/news";
+
         function setDefaultDates() {
             const today = new Date().toISOString().split('T')[0];
             document.getElementById("startDate").value = today;
             document.getElementById("endDate").value = today;
         }
 
-        async function fetchNews(fetchAll = false) {
+        function showNotification(message, type = "success") {
+            const box = document.getElementById("notificationBox");
+            box.className = `alert alert-${type} d-block position-fixed top-0 start-50 translate-middle-x mt-3 shadow`;
+            box.textContent = message;
+
+            clearTimeout(box.timeout);
+            box.timeout = setTimeout(() => {
+                box.classList.add("d-none");
+            }, 2500);
+        }
+
+        async function fetchNews() {
             const title = document.getElementById("title").value.trim();
             const startDate = document.getElementById("startDate").value;
             const endDate = document.getElementById("endDate").value;
+            const impact = document.getElementById("impactFilter").value;
 
             if (!startDate || !endDate) {
-                alert("Please select both start and end dates.");
+                showNotification("Please select both start and end dates.", "warning");
                 return;
             }
 
-            const query = `title=${encodeURIComponent(title)}&startDate=${startDate}&endDate=${endDate}`;
-            const apiUrl = `https://localhost:44399/api/news/search?${query}`;
+            const query = `title=${encodeURIComponent(title)}&startDate=${startDate}&endDate=${endDate}&impact=${impact}`;
+            const url = `${apiBase}/search?${query}`;
+            const tbody = document.getElementById("newsTableBody");
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Loading...</td></tr>`;
 
             try {
-                const response = await fetch(apiUrl);
-                if (!response.ok) throw new Error("Failed to fetch news");
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("Failed to fetch");
 
-                const news = await response.json();
-                const tbody = document.getElementById("newsTableBody");
-                tbody.innerHTML = "";
-
-                if (news.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No news found for the selected criteria.</td></tr>`;
+                const data = await res.json();
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No news found.</td></tr>`;
                     return;
                 }
 
-                news.forEach(item => {
-                    const row = `
+                const rows = data.map(item => `
                             <tr>
                                 <td>${item.Id}</td>
                                 <td>${item.Title}</td>
@@ -124,37 +152,51 @@
                                 <td><a href="${item.Url}" target="_blank">View</a></td>
                                 <td>${item.NewsImpact || '<span class="text-muted">None</span>'}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-success btn-impact" onclick="updateImpact(${item.Id}, 'Positive')">Positive</button>
-                                    <button class="btn btn-sm btn-danger btn-impact" onclick="updateImpact(${item.Id}, 'Negative')">Negative</button>
-                                    <button class="btn btn-sm btn-secondary btn-impact" onclick="updateImpact(${item.Id}, 'Archive')">Archive</button>
+                                    <button class="btn btn-sm btn-success btn-impact" onclick="updateImpact(${item.Id}, 'Positive')">P</button>
+                                    <button class="btn btn-sm btn-danger btn-impact" onclick="updateImpact(${item.Id}, 'Negative')">N</button>
+                                    <button class="btn btn-sm btn-secondary btn-impact" onclick="updateImpact(${item.Id}, 'Archive')">A</button>
                                 </td>
-                            </tr>`;
-                    tbody.innerHTML += row;
-                });
-            } catch (error) {
-                alert("Error fetching news: " + error.message);
+                            </tr>
+                        `).join("");
+
+                tbody.innerHTML = rows;
+            } catch (err) {
+                tbody.innerHTML = "";
+                showNotification("Error: " + err.message, "danger");
             }
         }
 
         async function updateImpact(id, impact) {
-            const apiUrl = `https://localhost:44399/api/news/updateImpact?id=${id}&impact=${impact}`;
+            const url = `${apiBase}/updateimpact?id=${id}&impact=${impact}`;
             try {
-                const response = await fetch(apiUrl, {
-                    method: "PUT"
-                });
+                const res = await fetch(url, { method: "PUT" });
+                if (!res.ok) throw new Error("Failed to update");
 
-                if (!response.ok) throw new Error("Failed to update");
+                showNotification(`Impact set to "${impact}" for ID ${id}`, "success");
+                fetchNews(); // Auto-refresh
+            } catch (err) {
+                showNotification("Update failed: " + err.message, "danger");
+            }
+        }
 
-                alert(`Impact updated to "${impact}" for News ID ${id}`);
-                fetchNews(); // Refresh list
-            } catch (error) {
-                alert("Error updating impact: " + error.message);
+        async function fetchLatestNews() {
+            const url = `${apiBase}/fetchall`;
+            showNotification("Fetching latest news...");
+
+            try {
+                const res = await fetch(url, { method: "POST" });
+                if (!res.ok) throw new Error("Fetch failed");
+
+                showNotification("✅ Latest news saved!");
+                fetchNews(); // Refresh table
+            } catch (err) {
+                showNotification("Error fetching news: " + err.message, "danger");
             }
         }
 
         window.onload = () => {
             setDefaultDates();
-            fetchNews(); // Load today's news on page load
+            fetchNews(); // Load today's news
         };
     </script>
 </body>
