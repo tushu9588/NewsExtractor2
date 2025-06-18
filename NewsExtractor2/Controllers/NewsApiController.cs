@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Web.Http;
 using MySql.Data.MySqlClient;
 using System.Configuration;
-using NewsExtractor2; // Make sure this matches your namespace
+using NewsExtractor2;
 
 namespace NewsExtractor2.Controllers
 {
@@ -14,20 +13,20 @@ namespace NewsExtractor2.Controllers
         private readonly string connStr = ConfigurationManager.ConnectionStrings["MySqlConn"]?.ConnectionString
             ?? throw new InvalidOperationException("Connection string 'MySqlConn' not found in Web.config.");
 
-        // 🔍 GET: api/news/all
         // ✅ GET: api/news/search?title=...&startDate=...&endDate=...
         [HttpGet]
         [Route("search")]
         public IHttpActionResult SearchNews(string title = "", string startDate = "", string endDate = "")
         {
-            List<NewsItem> results = new List<NewsItem>();
+            var results = new List<NewsItem>();
 
             using (var conn = new MySqlConnection(connStr))
             {
                 conn.Open();
-                string query = @"SELECT Id,title, url, PublicationDate, type, NewsImpact FROM News
-                         WHERE (@title = '' OR title LIKE @title)
-                         AND (PublicationDate BETWEEN @start AND @end)";
+                string query = @"SELECT Id, title, url, PublicationDate, type, NewsImpact 
+                                 FROM News
+                                 WHERE (@title = '' OR title LIKE @title)
+                                 AND (PublicationDate BETWEEN @start AND @end)";
 
                 using (var cmd = new MySqlCommand(query, conn))
                 {
@@ -35,41 +34,31 @@ namespace NewsExtractor2.Controllers
 
                     DateTime start = string.IsNullOrEmpty(startDate) ? DateTime.Today : DateTime.Parse(startDate);
                     DateTime end = string.IsNullOrEmpty(endDate) ? DateTime.Today : DateTime.Parse(endDate);
-
                     cmd.Parameters.AddWithValue("@start", start);
                     cmd.Parameters.AddWithValue("@end", end);
 
                     using (var reader = cmd.ExecuteReader())
                     {
-                        
-                        
-                            while (reader.Read())
+                        while (reader.Read())
+                        {
+                            results.Add(new NewsItem
                             {
-                                results.Add(new NewsItem
-                                {
-                                    Id = Convert.ToInt32(reader["Id"]),
-                                    Title = reader["Title"].ToString(),
-                                    Url = reader["Url"].ToString(),
-                                    PublicationDate = Convert.ToDateTime(reader["PublicationDate"]),
-                                    Type = reader["Type"].ToString(),
-                                    NewsImpact = reader["NewsImpact"] != DBNull.Value
-                                                    ? reader["NewsImpact"].ToString()
-                                                    : "Positive"  // or use null if you prefer
-                                });
-                            }
-
-
-
-
+                                Id = Convert.ToInt32(reader["Id"]),
+                                Title = reader["Title"].ToString(),
+                                Url = reader["Url"].ToString(),
+                                PublicationDate = Convert.ToDateTime(reader["PublicationDate"]),
+                                Type = reader["Type"].ToString(),
+                                NewsImpact = reader["NewsImpact"] != DBNull.Value
+                                                ? reader["NewsImpact"].ToString()
+                                                : null // <- Default null
+                            });
                         }
                     }
+                }
             }
 
             return Ok(results);
         }
-
-        
-
 
         // 🔁 POST: api/news/fetchall
         [HttpPost]
@@ -82,14 +71,14 @@ namespace NewsExtractor2.Controllers
                 breaking.ForEach(n =>
                 {
                     n.Type = "Breaking";
-                    n.NewsImpact = "Positive";
+                    n.NewsImpact = null; // <- Allow user to set it later
                 });
 
                 var regular = await NewsFetcher.FetchNewsFromSitemapAsync();
                 regular.ForEach(n =>
                 {
                     n.Type = "Regular";
-                    n.NewsImpact = "Positive";
+                    n.NewsImpact = null; // <- Allow user to set it later
                 });
 
                 var saver = new NewsDatabaseSaver();
@@ -104,32 +93,31 @@ namespace NewsExtractor2.Controllers
             }
         }
 
-        // ✏️ PUT: api/news/updateimpact
+        // ✏️ PUT: api/news/updateimpact?id=123&impact=Null
         [HttpPut]
         [Route("updateimpact")]
-        public IHttpActionResult UpdateNewsImpact([FromBody] NewsItem news)
+        public IHttpActionResult UpdateNewsImpact(int id, string impact)
         {
-            if (string.IsNullOrEmpty(news.Title) || string.IsNullOrEmpty(news.NewsImpact))
-                return BadRequest("Title and NewsImpact are required.");
+            if (string.IsNullOrEmpty(impact) || !(impact == "Positive" || impact == "Negative" || impact == "Archive"))
+                return BadRequest("Impact must be Positive, Negative, or Archive.");
 
-            using (var conn = new MySqlConnection(connStr))
+            using (var connection = new MySqlConnection(connStr))
             {
-                conn.Open();
-                string query = @"UPDATE News SET NewsImpact = @impact WHERE title = @title";
+                connection.Open();
+                var query = "UPDATE News SET NewsImpact = @impact WHERE Id = @id";
 
-                using (var cmd = new MySqlCommand(query, conn))
+                using (var command = new MySqlCommand(query, connection))
                 {
-                    cmd.Parameters.AddWithValue("@impact", news.NewsImpact);
-                    cmd.Parameters.AddWithValue("@title", news.Title);
-                    int rows = cmd.ExecuteNonQuery();
+                    command.Parameters.AddWithValue("@impact", impact);
+                    command.Parameters.AddWithValue("@id", id);
 
-                    if (rows == 0)
+                    int rowsAffected = command.ExecuteNonQuery();
+                    if (rowsAffected > 0)
+                        return Ok("✅ NewsImpact updated successfully.");
+                    else
                         return NotFound();
                 }
             }
-
-            return Ok("✅ NewsImpact updated successfully.");
         }
-
     }
 }

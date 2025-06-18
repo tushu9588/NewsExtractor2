@@ -27,18 +27,10 @@
             color: white;
         }
 
-        td, th {
-            vertical-align: middle;
+        .btn-impact {
+            margin: 2px;
+            padding: 2px 8px;
         }
-
-        .table a {
-            text-decoration: none;
-            color: #0d6efd;
-        }
-
-            .table a:hover {
-                text-decoration: underline;
-            }
     </style>
 </head>
 <body>
@@ -46,14 +38,6 @@
         <div class="text-center mb-4">
             <h2><i class="bi bi-newspaper"></i> <strong>Economic Times News</strong></h2>
             <p class="text-muted">Search and view the latest business headlines</p>
-        </div>
-        <div class="col-md-2">
-            <select id="impact" class="form-select">
-                <option value="">All Impacts</option>
-                <option value="Positive">Positive</option>
-                <option value="Negative">Negative</option>
-                <option value="Archive">Archive</option>
-            </select>
         </div>
 
         <div class="container-box">
@@ -87,11 +71,11 @@
                         <th>Title</th>
                         <th>Published On</th>
                         <th>Link</th>
-                        <th>Impact</th> <!-- Added -->
+                        <th>Impact</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="newsTableBody">
-
                     <!-- News rows will appear here -->
                 </tbody>
             </table>
@@ -127,24 +111,44 @@
                 tbody.innerHTML = "";
 
                 if (news.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No news found for the selected criteria.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No news found for the selected criteria.</td></tr>`;
                     return;
                 }
 
                 news.forEach(item => {
                     const row = `
-    <tr>
-        <td>${item.Id}</td>
-        <td>${item.Title}</td>
-        <td>${new Date(item.PublicationDate).toLocaleDateString()}</td>
-        <td><a href="${item.Url}" target="_blank">View</a></td>
-        <td>${item.NewsImpact}</td>
-    </tr>`;
-
+                            <tr>
+                                <td>${item.Id}</td>
+                                <td>${item.Title}</td>
+                                <td>${new Date(item.PublicationDate).toLocaleDateString()}</td>
+                                <td><a href="${item.Url}" target="_blank">View</a></td>
+                                <td>${item.NewsImpact || '<span class="text-muted">None</span>'}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-success btn-impact" onclick="updateImpact(${item.Id}, 'Positive')">Positive</button>
+                                    <button class="btn btn-sm btn-danger btn-impact" onclick="updateImpact(${item.Id}, 'Negative')">Negative</button>
+                                    <button class="btn btn-sm btn-secondary btn-impact" onclick="updateImpact(${item.Id}, 'Archive')">Archive</button>
+                                </td>
+                            </tr>`;
                     tbody.innerHTML += row;
                 });
             } catch (error) {
                 alert("Error fetching news: " + error.message);
+            }
+        }
+
+        async function updateImpact(id, impact) {
+            const apiUrl = `https://localhost:44399/api/news/updateImpact?id=${id}&impact=${impact}`;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: "PUT"
+                });
+
+                if (!response.ok) throw new Error("Failed to update");
+
+                alert(`Impact updated to "${impact}" for News ID ${id}`);
+                fetchNews(); // Refresh list
+            } catch (error) {
+                alert("Error updating impact: " + error.message);
             }
         }
 
