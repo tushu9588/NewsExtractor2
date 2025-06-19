@@ -16,28 +16,32 @@ namespace NewsExtractor2.Controllers
         // ✅ GET: api/news/search?title=...&startDate=...&endDate=...
         [HttpGet]
         [Route("search")]
-        public IHttpActionResult SearchNews(string title = "", string startDate = "", string endDate = "", string impact = "")
+        public IHttpActionResult SearchNews(string title = "", string startDate = "", string endDate = "", string impact = "", int page = 1, int pageSize = 20)
         {
             var results = new List<NewsItem>();
-
             using (var conn = new MySqlConnection(connStr))
             {
                 conn.Open();
-                string query = @"SELECT Id, title, url, PublicationDate, type, NewsImpact 
-                         FROM News
-                         WHERE (@title = '' OR title LIKE @title)
-                         AND (PublicationDate BETWEEN @start AND @end)
-                         AND (@impact = '' OR NewsImpact = @impact)";
+                string query = @"
+            SELECT Id, title, url, PublicationDate, type, NewsImpact
+            FROM News
+            WHERE (PublicationDate BETWEEN @start AND @end)
+              AND (@title = '' OR title LIKE CONCAT('%', @title, '%'))
+              AND (@impact = '' OR NewsImpact = @impact)
+            ORDER BY PublicationDate DESC
+            LIMIT @offset, @pageSize";
 
                 using (var cmd = new MySqlCommand(query, conn))
                 {
-                    cmd.Parameters.AddWithValue("@title", "%" + title + "%");
-
-                    DateTime start = string.IsNullOrEmpty(startDate) ? DateTime.Today : DateTime.Parse(startDate);
+                    DateTime start = string.IsNullOrEmpty(startDate) ? DateTime.Today.AddDays(-1) : DateTime.Parse(startDate);
                     DateTime end = string.IsNullOrEmpty(endDate) ? DateTime.Today : DateTime.Parse(endDate);
+
                     cmd.Parameters.AddWithValue("@start", start);
                     cmd.Parameters.AddWithValue("@end", end);
+                    cmd.Parameters.AddWithValue("@title", title);
                     cmd.Parameters.AddWithValue("@impact", impact);
+                    cmd.Parameters.AddWithValue("@offset", (page - 1) * pageSize);
+                    cmd.Parameters.AddWithValue("@pageSize", pageSize);
 
                     using (var reader = cmd.ExecuteReader())
                     {
@@ -50,17 +54,15 @@ namespace NewsExtractor2.Controllers
                                 Url = reader["Url"].ToString(),
                                 PublicationDate = Convert.ToDateTime(reader["PublicationDate"]),
                                 Type = reader["type"].ToString(),
-                                NewsImpact = reader["NewsImpact"] != DBNull.Value
-                                    ? reader["NewsImpact"].ToString()
-                                    : null
+                                NewsImpact = reader["NewsImpact"]?.ToString()
                             });
                         }
                     }
                 }
             }
-
             return Ok(results);
         }
+
 
         // 🔁 POST: api/news/fetchall
         [HttpPost]
@@ -83,11 +85,19 @@ namespace NewsExtractor2.Controllers
                     n.NewsImpact = null;
                 });
 
+                var toi = await TimesOfIndiaNewsFetcher.FetchNewsAsync(); // ✅ New
+                toi.ForEach(n =>
+                {
+                    n.Type = "TimesOfIndia";
+                    n.NewsImpact = null;
+                });
+
                 var saver = new NewsDatabaseSaver();
                 saver.SaveNews(breaking);
                 saver.SaveNews(regular);
+                saver.SaveNews(toi); // ✅ Save TOI too
 
-                return Ok("✅ News fetched & saved successfully.");
+                return Ok("✅ All sources fetched & saved.");
             }
             catch (Exception ex)
             {

@@ -215,6 +215,7 @@
     <Compile Include="helpers\BreakingNewsFetcher.cs" />
     <Compile Include="helpers\NewsDatabaseSaver.cs" />
     <Compile Include="helpers\NewsFetcher.cs" />
+    <Compile Include="helpers\TimesOfIndiaNewsFetcher.cs" />
     <Compile Include="Models\NewsFilter.cs" />
     <Compile Include="Models\NewsItem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <title>Economic Times News</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <!-- Bootstrap + Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-
     <style>
         body {
             background-color: #f0f2f5;
@@ -75,6 +72,7 @@
                 <i class="bi bi-arrow-clockwise"></i> Fetch Latest News
             </button>
         </div>
+        <div class="text-center mt-3" id="pagination"></div>
 
         <div class="table-responsive mt-4">
             <table class="table table-bordered table-hover align-middle">
@@ -90,6 +88,7 @@
                 </thead>
                 <tbody id="newsTableBody">
                     <!-- News rows will appear here -->
+
                 </tbody>
             </table>
         </div>
@@ -99,12 +98,72 @@
     <div id="notificationBox" class="alert d-none position-fixed top-0 start-50 translate-middle-x mt-3 shadow" role="alert"></div>
 
     <script>
+        let currentPage = 1;
+        const pageSize = 20;
+
+        async function fetchNews(page = 1) {
+            currentPage = page;
+
+            const title = document.getElementById("title").value.trim();
+            const startDate = document.getElementById("startDate").value;
+            const endDate = document.getElementById("endDate").value;
+            const impact = document.getElementById("impactFilter").value;
+
+            const query = `title=${encodeURIComponent(title)}&startDate=${startDate}&endDate=${endDate}&impact=${impact}&page=${page}&pageSize=${pageSize}`;
+            const url = `${apiBase}/search?${query}`;
+            const tbody = document.getElementById("newsTableBody");
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Loading...</td></tr>`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No news found.</td></tr>`;
+                    return;
+                }
+
+                const rows = data.map(item => `
+            <tr>
+                <td>${item.Id}</td>
+                <td>${item.Title}</td>
+                <td>${new Date(item.PublicationDate).toLocaleDateString()}</td>
+                <td><a href="${item.Url}" target="_blank">View</a></td>
+                <td>${item.NewsImpact || '<span class="text-muted">None</span>'}</td>
+                <td>
+                    <button class="btn btn-sm btn-success btn-impact" onclick="updateImpact(${item.Id}, 'Positive')">P</button>
+                    <button class="btn btn-sm btn-danger btn-impact" onclick="updateImpact(${item.Id}, 'Negative')">N</button>
+                    <button class="btn btn-sm btn-secondary btn-impact" onclick="updateImpact(${item.Id}, 'Archive')">A</button>
+                </td>
+            </tr>
+        `).join("");
+
+                tbody.innerHTML = rows;
+                renderPaginationControls();
+            } catch (err) {
+                tbody.innerHTML = "";
+                showNotification("Error: " + err.message, "danger");
+            }
+        }
+
+        function renderPaginationControls() {
+            const container = document.getElementById("pagination");
+            container.innerHTML = `
+        <button class="btn btn-sm btn-outline-secondary" onclick="fetchNews(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>Previous</button>
+        <span class="mx-2">Page ${currentPage}</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="fetchNews(${currentPage + 1})">Next</button>
+    `;
+        }
+
         const apiBase = "https://localhost:44399/api/news";
 
         function setDefaultDates() {
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById("startDate").value = today;
-            document.getElementById("endDate").value = today;
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+
+            document.getElementById("startDate").value = yesterday.toISOString().split('T')[0];
+            document.getElementById("endDate").value = today.toISOString().split('T')[0];
         }
 
         function showNotification(message, type = "success") {
@@ -113,9 +172,7 @@
             box.textContent = message;
 
             clearTimeout(box.timeout);
-            box.timeout = setTimeout(() => {
-                box.classList.add("d-none");
-            }, 2500);
+            box.timeout = setTimeout(() => box.classList.add("d-none"), 2500);
         }
 
         async function fetchNews() {
@@ -123,43 +180,43 @@
             const startDate = document.getElementById("startDate").value;
             const endDate = document.getElementById("endDate").value;
             const impact = document.getElementById("impactFilter").value;
+            const tbody = document.getElementById("newsTableBody");
 
             if (!startDate || !endDate) {
                 showNotification("Please select both start and end dates.", "warning");
                 return;
             }
 
-            const query = `title=${encodeURIComponent(title)}&startDate=${startDate}&endDate=${endDate}&impact=${impact}`;
-            const url = `${apiBase}/search?${query}`;
-            const tbody = document.getElementById("newsTableBody");
             tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Loading...</td></tr>`;
+            const url = `${apiBase}/search?title=${encodeURIComponent(title)}&startDate=${startDate}&endDate=${endDate}&impact=${impact}`;
 
             try {
                 const res = await fetch(url);
                 if (!res.ok) throw new Error("Failed to fetch");
-
                 const data = await res.json();
-                if (data.length === 0) {
+
+                if (!data.length) {
                     tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No news found.</td></tr>`;
                     return;
                 }
 
-                const rows = data.map(item => `
-                            <tr>
-                                <td>${item.Id}</td>
-                                <td>${item.Title}</td>
-                                <td>${new Date(item.PublicationDate).toLocaleDateString()}</td>
-                                <td><a href="${item.Url}" target="_blank">View</a></td>
-                                <td>${item.NewsImpact || '<span class="text-muted">None</span>'}</td>
-                                <td>
-                                    <button class="btn btn-sm btn-success btn-impact" onclick="updateImpact(${item.Id}, 'Positive')">P</button>
-                                    <button class="btn btn-sm btn-danger btn-impact" onclick="updateImpact(${item.Id}, 'Negative')">N</button>
-                                    <button class="btn btn-sm btn-secondary btn-impact" onclick="updateImpact(${item.Id}, 'Archive')">A</button>
-                                </td>
-                            </tr>
-                        `).join("");
-
-                tbody.innerHTML = rows;
+                let html = "";
+                for (let item of data) {
+                    html += `
+                        <tr>
+                            <td>${item.Id}</td>
+                            <td>${item.Title}</td>
+                            <td>${new Date(item.PublicationDate).toLocaleDateString()}</td>
+                            <td><a href="${item.Url}" target="_blank">View</a></td>
+                            <td>${item.NewsImpact || '<span class="text-muted">None</span>'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-success btn-impact" onclick="updateImpact(${item.Id}, 'Positive')">P</button>
+                                <button class="btn btn-sm btn-danger btn-impact" onclick="updateImpact(${item.Id}, 'Negative')">N</button>
+                                <button class="btn btn-sm btn-secondary btn-impact" onclick="updateImpact(${item.Id}, 'Archive')">A</button>
+                            </td>
+                        </tr>`;
+                }
+                tbody.innerHTML = html;
             } catch (err) {
                 tbody.innerHTML = "";
                 showNotification("Error: " + err.message, "danger");
@@ -167,28 +224,23 @@
         }
 
         async function updateImpact(id, impact) {
-            const url = `${apiBase}/updateimpact?id=${id}&impact=${impact}`;
             try {
-                const res = await fetch(url, { method: "PUT" });
+                const res = await fetch(`${apiBase}/updateimpact?id=${id}&impact=${impact}`, { method: "PUT" });
                 if (!res.ok) throw new Error("Failed to update");
-
-                showNotification(`Impact set to "${impact}" for ID ${id}`, "success");
-                fetchNews(); // Auto-refresh
+                showNotification(`Impact updated to "${impact}" for ID ${id}`, "success");
+                fetchNews();
             } catch (err) {
                 showNotification("Update failed: " + err.message, "danger");
             }
         }
 
         async function fetchLatestNews() {
-            const url = `${apiBase}/fetchall`;
             showNotification("Fetching latest news...");
-
             try {
-                const res = await fetch(url, { method: "POST" });
+                const res = await fetch(`${apiBase}/fetchall`, { method: "POST" });
                 if (!res.ok) throw new Error("Fetch failed");
-
                 showNotification("✅ Latest news saved!");
-                fetchNews(); // Refresh table
+                fetchNews();
             } catch (err) {
                 showNotification("Error fetching news: " + err.message, "danger");
             }
@@ -196,7 +248,7 @@
 
         window.onload = () => {
             setDefaultDates();
-            fetchNews(); // Load today's news
+            fetchNews();
         };
     </script>
 </body>
